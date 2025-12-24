@@ -47,7 +47,6 @@ func (m *AuthMiddleware) Handle(next http.Handler) http.Handler {
 
 		// 尝试从请求中提取凭证
 		credentials := m.extractCredentials(r)
-
 		if credentials == nil {
 			if m.required {
 				m.logger.Debug("no credentials provided")
@@ -71,8 +70,7 @@ func (m *AuthMiddleware) Handle(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, UserContextKey, u)
 		r = r.WithContext(ctx)
 
-		m.logger.Debug("user authenticated",
-			zap.String("username", u.Username))
+		m.logger.Debug("user authenticated", zap.String("username", u.Username))
 
 		next.ServeHTTP(w, r)
 	})

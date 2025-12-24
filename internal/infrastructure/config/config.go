@@ -7,12 +7,27 @@ import (
 // Config 应用配置
 type Config struct {
 	Server   ServerConfig   `yaml:"server"`
+	Database DatabaseConfig `yaml:"database"` // 新增
 	WebDAV   WebDAVConfig   `yaml:"webdav"`
 	Web3     Web3Config     `yaml:"web3"`
 	Security SecurityConfig `yaml:"security"`
 	CORS     CORSConfig     `yaml:"cors"`
 	Log      LogConfig      `yaml:"log"`
 	Users    []UserConfig   `yaml:"users"`
+}
+
+// DatabaseConfig 数据库配置
+type DatabaseConfig struct {
+	Type         string        `yaml:"type"` // 仅支持 "postgres"/"postgresql"
+	Host         string        `yaml:"host"`
+	Port         int           `yaml:"port"`
+	Database     string        `yaml:"database"`
+	Username     string        `yaml:"username"`
+	Password     string        `yaml:"password"`
+	SSLMode      string        `yaml:"ssl_mode"`
+	MaxOpenConns int           `yaml:"max_open_conns"`
+	MaxIdleConns int           `yaml:"max_idle_conns"`
+	MaxLifetime  time.Duration `yaml:"max_lifetime"`
 }
 
 // ServerConfig 服务器配置
@@ -38,15 +53,14 @@ type WebDAVConfig struct {
 
 // Web3Config Web3 配置
 type Web3Config struct {
-	Enabled         bool          `yaml:"enabled"`
 	JWTSecret       string        `yaml:"jwt_secret"`
 	TokenExpiration time.Duration `yaml:"token_expiration"`
 }
 
 // SecurityConfig 安全配置
 type SecurityConfig struct {
-	NoPassword   bool `yaml:"no_password"`
-	BehindProxy  bool `yaml:"behind_proxy"`
+	NoPassword  bool `yaml:"no_password"`
+	BehindProxy bool `yaml:"behind_proxy"`
 }
 
 // CORSConfig CORS 配置
@@ -75,6 +89,7 @@ type UserConfig struct {
 	Directory     string       `yaml:"directory"`
 	Permissions   string       `yaml:"permissions"`
 	Rules         []RuleConfig `yaml:"rules"`
+	Quota         int64        `yaml:"quota"` // 新增：配额（字节），0 表示无限制
 }
 
 // RuleConfig 规则配置
@@ -96,6 +111,18 @@ func DefaultConfig() *Config {
 			IdleTimeout:     60 * time.Second,
 			ShutdownTimeout: 10 * time.Second,
 		},
+		Database: DatabaseConfig{
+			Type:         "postgres", // 默认使用 PostgreSQL
+			Host:         "localhost",
+			Port:         5432,
+			Database:     "webdav",
+			Username:     "webdav",
+			Password:     "",
+			SSLMode:      "disable",
+			MaxOpenConns: 25,
+			MaxIdleConns: 5,
+			MaxLifetime:  5 * time.Minute,
+		},
 		WebDAV: WebDAVConfig{
 			Prefix:      "/",
 			Directory:   "/data",
@@ -103,7 +130,6 @@ func DefaultConfig() *Config {
 			Permissions: "R",
 		},
 		Web3: Web3Config{
-			Enabled:         false,
 			TokenExpiration: 24 * time.Hour,
 		},
 		Security: SecurityConfig{
@@ -123,4 +149,3 @@ func DefaultConfig() *Config {
 		Users: []UserConfig{},
 	}
 }
-

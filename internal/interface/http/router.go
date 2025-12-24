@@ -18,6 +18,7 @@ type Router struct {
 	healthHandler  *handler.HealthHandler
 	web3Handler    *handler.Web3Handler
 	webdavHandler  *handler.WebDAVHandler
+	quotaHandler   *handler.QuotaHandler // 新增配额处理器
 	logger         *zap.Logger
 }
 
@@ -28,6 +29,7 @@ func NewRouter(
 	healthHandler *handler.HealthHandler,
 	web3Handler *handler.Web3Handler,
 	webdavHandler *handler.WebDAVHandler,
+	quotaHandler *handler.QuotaHandler,
 	logger *zap.Logger,
 ) *Router {
 	return &Router{
@@ -36,6 +38,7 @@ func NewRouter(
 		healthHandler:  healthHandler,
 		web3Handler:    web3Handler,
 		webdavHandler:  webdavHandler,
+		quotaHandler:   quotaHandler,
 		logger:         logger,
 	}
 }
@@ -48,14 +51,15 @@ func (r *Router) Setup() http.Handler {
 	mux.HandleFunc("/health", r.healthHandler.Handle)
 
 	// Web3 认证路由（无需认证）
-	if r.config.Web3.Enabled {
-		mux.HandleFunc("/api/auth/challenge", r.web3Handler.HandleChallenge)
-		mux.HandleFunc("/api/auth/verify", r.web3Handler.HandleVerify)
-	}
+	mux.HandleFunc("/api/auth/challenge", r.web3Handler.HandleChallenge)
+	mux.HandleFunc("/api/auth/verify", r.web3Handler.HandleVerify)
+
+	// API 路由（需要认证）
+	mux.Handle("/api/quota", r.createAuthenticatedHandler(http.HandlerFunc(r.quotaHandler.GetUserQuota)))
 
 	// WebDAV 路由（需要认证）
 	webdavPrefix := r.normalizePrefix(r.config.WebDAV.Prefix)
-	mux.Handle(webdavPrefix, r.createWebDAVHandler())
+	mux.Handle(webdavPrefix, r.createAuthenticatedHandler(http.HandlerFunc(r.webdavHandler.Handle)))
 
 	// 应用全局中间件
 	handler := r.applyMiddlewares(mux)
@@ -63,24 +67,11 @@ func (r *Router) Setup() http.Handler {
 	return handler
 }
 
-// createWebDAVHandler 创建 WebDAV 处理器（带中间件）
-func (r *Router) createWebDAVHandler() http.Handler {
-	// 原始的 WebDAV 处理器
-	var handler http.Handler = http.HandlerFunc(r.webdavHandler.Handle)
-
-	// 1. 先应用 WebDAV 中间件（最内层）
-	//    - 处理 OPTIONS 请求
-	//    - 添加 DAV 响应头
-	webdavMiddleware := middleware.NewWebDAVMiddleware()
-	handler = webdavMiddleware.Handle(handler)
-
-	// 2. 再应用认证中间件（外层）
-	//    - 验证用户身份
-	//    - OPTIONS 请求需要在这里放行
+// createAuthenticatedHandler 创建需要认证的处理器
+func (r *Router) createAuthenticatedHandler(handler http.Handler) http.Handler {
+	// 应用认证中间件
 	authMiddleware := middleware.NewAuthMiddleware(r.authenticators, true, r.logger)
-	handler = authMiddleware.Handle(handler)
-
-	return handler
+	return authMiddleware.Handle(handler)
 }
 
 // applyMiddlewares 应用全局中间件

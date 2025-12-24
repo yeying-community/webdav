@@ -1,12 +1,16 @@
 package container
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/yeying-community/webdav/internal/application/service"
 	"github.com/yeying-community/webdav/internal/domain/auth"
+	"github.com/yeying-community/webdav/internal/domain/quota"
+	"github.com/yeying-community/webdav/internal/domain/user"
 	infraAuth "github.com/yeying-community/webdav/internal/infrastructure/auth"
 	"github.com/yeying-community/webdav/internal/infrastructure/config"
+	"github.com/yeying-community/webdav/internal/infrastructure/database"
 	"github.com/yeying-community/webdav/internal/infrastructure/logger"
 	"github.com/yeying-community/webdav/internal/infrastructure/permission"
 	"github.com/yeying-community/webdav/internal/infrastructure/repository"
@@ -21,22 +25,26 @@ type Container struct {
 	Config *config.Config
 	Logger *zap.Logger
 
+	// Database
+	DB *database.PostgresDB
+
 	// Repositories
-	UserRepo *repository.MemoryUserRepository
+	UserRepository user.Repository
+
+	// Services
+	QuotaService  quota.Service
+	WebDAVService *service.WebDAVService
 
 	// Authenticators
 	Authenticators []auth.Authenticator
 	BasicAuth      *infraAuth.BasicAuthenticator
 	Web3Auth       *infraAuth.Web3Authenticator
 
-	// Services
-	WebDAVService *service.WebDAVService
-
 	// Handlers
 	HealthHandler *handler.HealthHandler
 	Web3Handler   *handler.Web3Handler
 	WebDAVHandler *handler.WebDAVHandler
-
+	QuotaHandler  *handler.QuotaHandler
 	// HTTP
 	Router *http.Router
 	Server *http.Server
@@ -54,16 +62,20 @@ func NewContainer(cfg *config.Config) (*Container, error) {
 		return nil, fmt.Errorf("failed to init logger: %w", err)
 	}
 
+	if err := c.initDatabase(); err != nil {
+		return nil, fmt.Errorf("failed to init database: %w", err)
+	}
+
 	if err := c.initRepositories(); err != nil {
 		return nil, fmt.Errorf("failed to init repositories: %w", err)
 	}
 
-	if err := c.initAuthenticators(); err != nil {
-		return nil, fmt.Errorf("failed to init authenticators: %w", err)
-	}
-
 	if err := c.initServices(); err != nil {
 		return nil, fmt.Errorf("failed to init services: %w", err)
+	}
+
+	if err := c.initAuthenticators(); err != nil {
+		return nil, fmt.Errorf("failed to init authenticators: %w", err)
 	}
 
 	if err := c.initHandlers(); err != nil {
@@ -92,12 +104,67 @@ func (c *Container) initLogger() error {
 	return nil
 }
 
+// initDatabase 初始化数据库
+func (c *Container) initDatabase() error {
+	// 仅支持 PostgreSQL
+	if !(c.Config.Database.Type == "postgres" || c.Config.Database.Type == "postgresql") {
+		return fmt.Errorf("unsupported database type %q: only postgres/postgresql is supported", c.Config.Database.Type)
+	}
+
+	db, err := database.NewPostgresDB(c.Config.Database)
+	if err != nil {
+		return fmt.Errorf("failed to connect to postgres: %w", err)
+	}
+	c.DB = db
+
+	// 执行数据库迁移
+	ctx := context.Background()
+	if err := c.DB.Migrate(ctx); err != nil {
+		return fmt.Errorf("failed to migrate database: %w", err)
+	}
+
+	c.Logger.Info("database initialized",
+		zap.String("type", "postgres"),
+		zap.String("host", c.Config.Database.Host),
+		zap.Int("port", c.Config.Database.Port))
+	return nil
+}
+
 // initRepositories 初始化仓储
 func (c *Container) initRepositories() error {
-	c.UserRepo = repository.NewMemoryUserRepository(c.Config.Users)
+	if c.DB == nil {
+		return fmt.Errorf("database not initialized")
+	}
 
-	c.Logger.Info("repositories initialized",
-		zap.Int("users", len(c.Config.Users)))
+	repo, err := repository.NewPostgresUserRepository(c.DB, c.Config.Users)
+	if err != nil {
+		return fmt.Errorf("failed to create postgres repository: %w", err)
+	}
+	c.UserRepository = repo
+
+	c.Logger.Info("using PostgreSQL user repository")
+	c.Logger.Info("repositories initialized", zap.Int("seed_users", len(c.Config.Users)))
+	return nil
+}
+
+// initServices 初始化服务
+func (c *Container) initServices() error {
+	// 配额服务
+	c.QuotaService = quota.NewService(c.UserRepository)
+
+	// WebDAV 服务
+	fileSystem := webdav.Dir(c.Config.WebDAV.Directory)
+	permissionChecker := permission.NewWebDAVChecker(fileSystem, c.Logger)
+
+	c.WebDAVService = service.NewWebDAVService(
+		c.Config,
+		permissionChecker,
+		c.QuotaService,
+		c.UserRepository,
+		c.Logger,
+	)
+
+	c.Logger.Info("services initialized", zap.Bool("quota_enabled", true))
 
 	return nil
 }
@@ -106,45 +173,22 @@ func (c *Container) initRepositories() error {
 func (c *Container) initAuthenticators() error {
 	// Basic 认证器
 	c.BasicAuth = infraAuth.NewBasicAuthenticator(
-		c.UserRepo,
+		c.UserRepository,
 		c.Config.Security.NoPassword,
 		c.Logger,
 	)
 	c.Authenticators = append(c.Authenticators, c.BasicAuth)
 
 	// Web3 认证器
-	if c.Config.Web3.Enabled {
-		c.Web3Auth = infraAuth.NewWeb3Authenticator(
-			c.UserRepo,
-			c.Config.Web3.JWTSecret,
-			c.Config.Web3.TokenExpiration,
-			c.Logger,
-		)
-		c.Authenticators = append(c.Authenticators, c.Web3Auth)
-
-		c.Logger.Info("web3 authentication enabled",
-			zap.Duration("token_expiration", c.Config.Web3.TokenExpiration))
-	}
-
-	c.Logger.Info("authenticators initialized",
-		zap.Int("count", len(c.Authenticators)))
-
-	return nil
-}
-
-// initServices 初始化服务
-func (c *Container) initServices() error {
-	// WebDAV 服务
-	fileSystem := webdav.Dir(c.Config.WebDAV.Directory)
-	permissionChecker := permission.NewWebDAVChecker(fileSystem, c.Logger)
-
-	c.WebDAVService = service.NewWebDAVService(
-		c.Config,
-		permissionChecker,
+	c.Web3Auth = infraAuth.NewWeb3Authenticator(
+		c.UserRepository,
+		c.Config.Web3.JWTSecret,
+		c.Config.Web3.TokenExpiration,
 		c.Logger,
 	)
+	c.Authenticators = append(c.Authenticators, c.Web3Auth)
 
-	c.Logger.Info("services initialized")
+	c.Logger.Info("authenticators initialized", zap.Int("count", len(c.Authenticators)))
 
 	return nil
 }
@@ -154,17 +198,25 @@ func (c *Container) initHandlers() error {
 	// 健康检查处理器
 	c.HealthHandler = handler.NewHealthHandler(c.Logger)
 
+	// 创建配额处理器
+	c.QuotaHandler = handler.NewQuotaHandler(c.QuotaService, c.Logger)
+
 	// Web3 处理器
 	if c.Web3Auth != nil {
 		c.Web3Handler = handler.NewWeb3Handler(
 			c.Web3Auth,
-			c.UserRepo,
+			c.UserRepository,
 			c.Logger,
 		)
 	}
 
 	// WebDAV 处理器
-	c.WebDAVHandler = handler.NewWebDAVHandler(c.WebDAVService, c.Logger)
+	c.WebDAVHandler = handler.NewWebDAVHandler(
+		c.WebDAVService,
+		c.QuotaService,
+		c.UserRepository,
+		c.Logger,
+	)
 
 	c.Logger.Info("handlers initialized")
 
@@ -180,12 +232,12 @@ func (c *Container) initHTTP() error {
 		c.HealthHandler,
 		c.Web3Handler,
 		c.WebDAVHandler,
+		c.QuotaHandler,
 		c.Logger,
 	)
 
 	// 服务器
 	c.Server = http.NewServer(c.Config, c.Router, c.Logger)
-
 	c.Logger.Info("http components initialized")
 
 	return nil
@@ -195,8 +247,21 @@ func (c *Container) initHTTP() error {
 func (c *Container) Close() error {
 	if c.Logger != nil {
 		c.Logger.Info("closing container")
+	}
+
+	// 关闭数据库连接
+	if c.DB != nil {
+		if err := c.DB.Close(); err != nil {
+			c.Logger.Error("failed to close database", zap.Error(err))
+		} else {
+			c.Logger.Info("database connection closed")
+		}
+	}
+
+	if c.Logger != nil {
 		_ = c.Logger.Sync()
 	}
 
 	return nil
 }
+

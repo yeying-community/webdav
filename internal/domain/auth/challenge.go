@@ -30,4 +30,3 @@ func (c *Challenge) Validate() error {
 	}
 	return nil
 }
-

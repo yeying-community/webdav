@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/yeying-community/webdav/internal/domain/auth"
 )
@@ -36,7 +36,7 @@ func NewJWTManager(secret string, expiration time.Duration) *JWTManager {
 func (m *JWTManager) Generate(address string) (*auth.Token, error) {
 	now := time.Now()
 	expiresAt := now.Add(m.expiration)
-	
+
 	claims := Claims{
 		Address: strings.ToLower(address),
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -47,13 +47,13 @@ func (m *JWTManager) Generate(address string) (*auth.Token, error) {
 			Subject:   address,
 		},
 	}
-	
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString(m.secret)
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign token: %w", err)
 	}
-	
+
 	return &auth.Token{
 		Value:     tokenString,
 		Address:   address,
@@ -71,18 +71,17 @@ func (m *JWTManager) Verify(tokenString string) (string, error) {
 		}
 		return m.secret, nil
 	})
-	
+
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return "", auth.ErrTokenExpired
 		}
 		return "", fmt.Errorf("%w: %v", auth.ErrInvalidToken, err)
 	}
-	
+
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
 		return claims.Address, nil
 	}
-	
+
 	return "", auth.ErrInvalidToken
 }
-

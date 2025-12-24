@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	
+
 	"github.com/yeying-community/webdav/internal/domain/auth"
 )
 
@@ -22,10 +22,10 @@ func NewChallengeStore() *ChallengeStore {
 	store := &ChallengeStore{
 		challenges: make(map[string]*auth.Challenge),
 	}
-	
+
 	// 启动清理协程
 	go store.cleanupExpired()
-	
+
 	return store
 }
 
@@ -35,19 +35,19 @@ func (s *ChallengeStore) Create(address string, expiresIn time.Duration) (*auth.
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate nonce: %w", err)
 	}
-	
+
 	now := time.Now()
 	message := buildChallengeMessage(address, nonce, now)
-	
+
 	challenge := &auth.Challenge{
 		Nonce:     nonce,
 		Message:   message,
 		Address:   strings.ToLower(address),
 		ExpiresAt: now.Add(expiresIn),
 	}
-	
+
 	s.Store(challenge)
-	
+
 	return challenge, nil
 }
 
@@ -55,7 +55,7 @@ func (s *ChallengeStore) Create(address string, expiresIn time.Duration) (*auth.
 func (s *ChallengeStore) Store(challenge *auth.Challenge) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	key := strings.ToLower(challenge.Address)
 	s.challenges[key] = challenge
 }
@@ -64,19 +64,19 @@ func (s *ChallengeStore) Store(challenge *auth.Challenge) {
 func (s *ChallengeStore) Get(address string) (*auth.Challenge, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	key := strings.ToLower(address)
 	challenge, ok := s.challenges[key]
-	
+
 	if !ok {
 		return nil, false
 	}
-	
+
 	// 检查是否过期
 	if challenge.IsExpired() {
 		return nil, false
 	}
-	
+
 	return challenge, true
 }
 
@@ -84,7 +84,7 @@ func (s *ChallengeStore) Get(address string) (*auth.Challenge, bool) {
 func (s *ChallengeStore) Delete(address string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	key := strings.ToLower(address)
 	delete(s.challenges, key)
 }
@@ -93,7 +93,7 @@ func (s *ChallengeStore) Delete(address string) {
 func (s *ChallengeStore) cleanupExpired() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
-	
+
 	for range ticker.C {
 		s.mu.Lock()
 		now := time.Now()
@@ -129,4 +129,3 @@ func buildChallengeMessage(address, nonce string, timestamp time.Time) string {
 		timestamp.Format(time.RFC3339),
 	)
 }
-

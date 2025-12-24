@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+
 	"github.com/yeying-community/webdav/internal/domain/user"
 )
 
@@ -9,10 +10,10 @@ import (
 type Authenticator interface {
 	// Name 认证器名称
 	Name() string
-	
+
 	// Authenticate 认证用户
 	Authenticate(ctx context.Context, credentials interface{}) (*user.User, error)
-	
+
 	// CanHandle 是否可以处理该凭证
 	CanHandle(credentials interface{}) bool
 }
@@ -27,4 +28,3 @@ type BasicCredentials struct {
 type BearerCredentials struct {
 	Token string
 }
-

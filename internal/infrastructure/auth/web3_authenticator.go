@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"time"
-	
+
 	"github.com/yeying-community/webdav/internal/domain/auth"
 	"github.com/yeying-community/webdav/internal/domain/user"
 	"github.com/yeying-community/webdav/internal/infrastructure/crypto"
@@ -47,14 +47,14 @@ func (a *Web3Authenticator) Authenticate(ctx context.Context, credentials interf
 	if !ok {
 		return nil, fmt.Errorf("invalid credentials type")
 	}
-	
+
 	// 验证 JWT
 	address, err := a.jwtManager.Verify(creds.Token)
 	if err != nil {
 		a.logger.Debug("jwt verification failed", zap.Error(err))
 		return nil, err
 	}
-	
+
 	// 查找用户
 	u, err := a.userRepo.FindByWalletAddress(ctx, address)
 	if err != nil {
@@ -65,11 +65,11 @@ func (a *Web3Authenticator) Authenticate(ctx context.Context, credentials interf
 		}
 		return nil, fmt.Errorf("failed to find user: %w", err)
 	}
-	
+
 	a.logger.Debug("user authenticated via web3",
 		zap.String("username", u.Username),
 		zap.String("address", address))
-	
+
 	return u, nil
 }
 
@@ -85,17 +85,17 @@ func (a *Web3Authenticator) CreateChallenge(address string) (*auth.Challenge, er
 	if !a.ethSigner.IsValidAddress(address) {
 		return nil, fmt.Errorf("invalid ethereum address")
 	}
-	
+
 	// 创建挑战（5分钟有效期）
 	challenge, err := a.challengeStore.Create(address, 5*time.Minute)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create challenge: %w", err)
 	}
-	
+
 	a.logger.Debug("challenge created",
 		zap.String("address", address),
 		zap.String("nonce", challenge.Nonce))
-	
+
 	return challenge, nil
 }
 
@@ -105,7 +105,7 @@ func (a *Web3Authenticator) VerifySignature(ctx context.Context, address, signat
 	if !a.ethSigner.IsValidAddress(address) {
 		return nil, fmt.Errorf("invalid ethereum address")
 	}
-	
+
 	// 获取挑战
 	challenge, ok := a.challengeStore.Get(address)
 	if !ok {
@@ -113,7 +113,7 @@ func (a *Web3Authenticator) VerifySignature(ctx context.Context, address, signat
 			zap.String("address", address))
 		return nil, auth.ErrChallengeExpired
 	}
-	
+
 	// 验证签名
 	if err := a.ethSigner.VerifySignature(challenge.Message, signature, address); err != nil {
 		a.logger.Warn("signature verification failed",
@@ -121,19 +121,19 @@ func (a *Web3Authenticator) VerifySignature(ctx context.Context, address, signat
 			zap.Error(err))
 		return nil, auth.ErrInvalidSignature
 	}
-	
+
 	// 删除已使用的挑战
 	a.challengeStore.Delete(address)
-	
+
 	// 生成 JWT
 	token, err := a.jwtManager.Generate(address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate token: %w", err)
 	}
-	
+
 	a.logger.Info("signature verified, token generated",
 		zap.String("address", address))
-	
+
 	return token, nil
 }
 
@@ -151,4 +151,3 @@ func (a *Web3Authenticator) GetChallengeStore() *ChallengeStore {
 func (a *Web3Authenticator) GetEthereumSigner() *crypto.EthereumSigner {
 	return a.ethSigner
 }
-

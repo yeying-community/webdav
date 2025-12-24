@@ -11,6 +11,18 @@ server:
   idle_timeout: 120s
   shutdown_timeout: 30s
 
+database:
+  type: "postgres"
+  host: "postgres"  # Docker service name or hostname
+  port: 5432
+  database: "webdav"
+  username: "webdav"
+  password: "${WEBDAV_DB_PASSWORD}"  # From environment variable
+  ssl_mode: "require"
+  max_open_conns: 25
+  max_idle_conns: 5
+  max_lifetime: 5m
+
 webdav:
   prefix: "/"
   directory: "/var/lib/webdav"
@@ -18,7 +30,6 @@ webdav:
   permissions: "R"
 
 web3:
-  enabled: true
   jwt_secret: "${WEBDAV_JWT_SECRET}"  # From environment variable
   token_expiration: 12h
 
@@ -58,8 +69,8 @@ log:
   colors: false
   outputs:
     - "/var/log/webdav/server.log"
-
 users:
-  # Load from environment or external source
+  # Users will be loaded from database in production
+  # This section is only used for initial setup
   []
 

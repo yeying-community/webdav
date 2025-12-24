@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var (
@@ -13,6 +15,8 @@ var (
 	ErrInvalidAddress    = errors.New("invalid wallet address")
 	ErrDuplicateUsername = errors.New("username already exists")
 	ErrDuplicateAddress  = errors.New("wallet address already exists")
+	ErrQuotaExceeded     = errors.New("storage quota exceeded") // 新增
+	ErrInvalidQuota      = errors.New("invalid quota value")    // 新增
 )
 
 // User 用户领域模型
@@ -24,6 +28,8 @@ type User struct {
 	Directory     string
 	Permissions   *Permissions
 	Rules         []*Rule
+	Quota         int64 // 存储配额（字节），0 表示无限制
+	UsedSpace     int64 // 已使用空间（字节）
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
@@ -52,6 +58,8 @@ func NewUser(username, directory string) *User {
 		Directory:   directory,
 		Permissions: DefaultPermissions(),
 		Rules:       make([]*Rule, 0),
+		Quota:       0, // 默认无限制
+		UsedSpace:   0,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
@@ -71,6 +79,68 @@ func (u *User) SetWalletAddress(address string) error {
 	u.WalletAddress = strings.ToLower(address)
 	u.UpdatedAt = time.Now()
 	return nil
+}
+
+// SetQuota 设置配额
+func (u *User) SetQuota(quota int64) error {
+	if quota < 0 {
+		return ErrInvalidQuota
+	}
+	u.Quota = quota
+	u.UpdatedAt = time.Now()
+	return nil
+}
+
+// UpdateUsedSpace 更新已使用空间
+func (u *User) UpdateUsedSpace(usedSpace int64) error {
+	if usedSpace < 0 {
+		usedSpace = 0
+	}
+	u.UsedSpace = usedSpace
+	u.UpdatedAt = time.Now()
+	return nil
+}
+
+// CanUpload 检查是否可以上传指定大小的文件
+func (u *User) CanUpload(fileSize int64) error {
+	// 如果配额为 0，表示无限制
+	if u.Quota == 0 {
+		return nil
+	}
+
+	// 检查是否超过配额
+	if u.UsedSpace+fileSize > u.Quota {
+		return ErrQuotaExceeded
+	}
+
+	return nil
+}
+
+// GetAvailableSpace 获取可用空间
+func (u *User) GetAvailableSpace() int64 {
+	// 如果配额为 0，返回 -1 表示无限制
+	if u.Quota == 0 {
+		return -1
+	}
+
+	available := u.Quota - u.UsedSpace
+	if available < 0 {
+		return 0
+	}
+	return available
+}
+
+// GetQuotaUsagePercent 获取配额使用百分比
+func (u *User) GetQuotaUsagePercent() float64 {
+	if u.Quota == 0 {
+		return 0
+	}
+	return float64(u.UsedSpace) / float64(u.Quota) * 100
+}
+
+// HasQuota 是否设置了配额限制
+func (u *User) HasQuota() bool {
+	return u.Quota > 0
 }
 
 // HasPassword 是否设置了密码
@@ -179,5 +249,5 @@ func (r *Rule) HasPermission(perm string) bool {
 
 // generateID 生成用户 ID
 func generateID() string {
-	return time.Now().Format("20060102150405")
+	return uuid.NewString()
 }
