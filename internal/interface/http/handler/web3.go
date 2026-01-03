@@ -40,6 +40,7 @@ type AddressInfo struct {
     CoinBalance string `json:"coin_balance"`
 }
 
+// 获取以太坊钱包的账户余额是否大于0 
 func HasBalance(address string) bool {
 	url := "https://blockscout.yeying.pub/backend/api/v2/addresses/" + address
 
@@ -70,25 +71,38 @@ func IsValidAddress(address string) bool {
     if !re.MatchString(address) {
         return false
     }
+    
     // 2. EIP-55 校验和检查
     return verifyChecksum(address)
 }
 
 func verifyChecksum(address string) bool {
     address = strings.TrimPrefix(address, "0x")
+    
+    // 关键修复：计算哈希时使用全小写地址
     hash := sha3.NewLegacyKeccak256()
     hash.Write([]byte(strings.ToLower(address)))
     digest := hash.Sum(nil)
+    
     for i := 0; i < 40; i++ {
         c := address[i]
         hashByte := digest[i/2]
+        
         if i%2 == 0 {
             hashByte >>= 4
         } else {
             hashByte &= 0x0f
         }
-        if (hashByte >= 8 && c < 'A') || (hashByte < 8 && c > '9') {
-            return false
+        
+        // 关键修复：正确的校验逻辑
+        expectedUpper := (hashByte >= 8)
+        isUpper := c >= 'A' && c <= 'F'
+        
+        // 如果是字母且大小写不匹配则返回false
+        if (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
+            if isUpper != expectedUpper {
+                return false
+            }
         }
     }
     return true
@@ -171,8 +185,10 @@ func (h *Web3Handler) HandleChallenge(w http.ResponseWriter, r *http.Request) {
 	// 规范化地址
 	address = strings.ToLower(strings.TrimSpace(address))
 
+	// 短期内不验证余额，先跳过
+	skip := false
 	// 检查当前钱包账户地址是否有余额
-	if !HasBalance(address) {
+	if skip && !HasBalance(address) {
 		h.logger.Error("The balance of the web3 wallet account is 0", zap.String("address", address))
 		h.sendError(w, http.StatusInternalServerError, "BALANCE_FETCH_FAIL", "The balance of the web3 wallet account is 0")
 		return
