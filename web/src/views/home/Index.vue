@@ -309,7 +309,7 @@ onMounted(() => {
         <span>存储空间: {{ formatSize(quota.used) }} / {{ quota.unlimited ? '无限' : formatSize(quota.quota) }}</span>
         <el-progress
           v-if="!quota.unlimited"
-          :percentage="Math.min(quota.percentage, 100)"
+          :percentage="Math.min(Number(quota.percentage.toFixed(2)), 100)"
           :stroke-width="8"
         />
       </div>
