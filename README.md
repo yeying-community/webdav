@@ -44,6 +44,11 @@ curl http://127.0.0.1:6065/api/v1/public/health/heartbeat
 - WebDAV 文件 CRUD 与认证流程：`docs/webdav-api.md`
 - 认证接口统一使用 `/api/v1/public/auth/*`
 
+## 设计文档
+
+- 中文：`docs/zh/README.md`
+- English: `docs/en/README.md`
+
 # UCAN 认证
 
 在 `config.yaml` 中启用 UCAN 后，可使用 `Authorization: Bearer <UCAN>` 访问需要鉴权的 API/WebDAV 资源。

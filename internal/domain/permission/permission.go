@@ -19,6 +19,8 @@ func MapHTTPMethodToOperation(method string) Operation {
 		return OperationWrite
 	case "POST", "MKCOL":
 		return OperationCreate
+	case "COPY", "MOVE":
+		return OperationWrite
 	case "DELETE":
 		return OperationDelete
 	default:
