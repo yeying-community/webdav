@@ -2,11 +2,17 @@
 import { computed, ref, watch, onBeforeUnmount, nextTick, shallowRef, markRaw } from 'vue'
 import { renderAsync } from 'docx-preview'
 import { GlobalWorkerOptions, getDocument } from 'pdfjs-dist/legacy/build/pdf.min.mjs'
-import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 type PreviewMode = 'text' | 'pdf' | 'word'
 
-GlobalWorkerOptions.workerSrc = PdfWorker
+let pdfWorkerReady = false
+
+async function ensurePdfWorker() {
+  if (pdfWorkerReady) return
+  const { default: workerSrc } = await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')
+  GlobalWorkerOptions.workerSrc = workerSrc
+  pdfWorkerReady = true
+}
 
 const props = defineProps<{
   modelValue: boolean
@@ -107,6 +113,7 @@ async function renderPdfPage() {
 
 async function loadPdf(blob: Blob) {
   resetPdf()
+  await ensurePdfWorker()
   const data = await blob.arrayBuffer()
   pdfDoc.value = markRaw(await getDocument({ data }).promise)
   pdfPageCount.value = pdfDoc.value.numPages || 1
