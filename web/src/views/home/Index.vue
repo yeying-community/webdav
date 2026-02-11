@@ -583,7 +583,7 @@ async function fetchFiles(path: string = '/') {
     // 先更新 currentPath，再解析
     currentPath.value = path
     localStorage.setItem(FILE_PATH_STORAGE_KEY, currentPath.value)
-    fileList.value = parsePropfindResponse(text, currentPath.value)
+    fileList.value = parsePropfindResponse(text, currentPath.value, DAV_PREFIX)
     console.log('parsed items:', fileList.value)
   } catch (error) {
     console.error('获取文件列表失败:', error)

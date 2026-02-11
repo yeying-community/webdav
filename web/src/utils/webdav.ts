@@ -6,6 +6,37 @@ export interface FileItem {
   modified: string
 }
 
+function normalizePrefix(prefix: string): string {
+  let normalized = (prefix || '').trim()
+  if (!normalized || normalized === '/') return ''
+  if (!normalized.startsWith('/')) normalized = '/' + normalized
+  if (normalized.length > 1) {
+    normalized = normalized.replace(/\/+$/, '')
+  }
+  return normalized === '/' ? '' : normalized
+}
+
+function stripWebdavPrefix(rawPath: string, prefix: string): string {
+  if (!rawPath) return '/'
+  let path = rawPath
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    try {
+      path = new URL(path).pathname || '/'
+    } catch {
+      // keep raw path if URL parsing fails
+    }
+  }
+  if (!path.startsWith('/')) path = '/' + path
+  const normalizedPrefix = normalizePrefix(prefix)
+  if (!normalizedPrefix) return path
+  if (path === normalizedPrefix) return '/'
+  if (path.startsWith(normalizedPrefix + '/')) {
+    const trimmed = path.slice(normalizedPrefix.length)
+    return trimmed || '/'
+  }
+  return path
+}
+
 // 规范化路径用于比较（确保统一格式）
 function normalizePathForCompare(path: string): string {
   if (path === '/') return '/'
@@ -20,7 +51,7 @@ function isSamePath(path1: string, path2: string): boolean {
 }
 
 // 解析 WebDAV PROPFIND 响应
-export function parsePropfindResponse(xml: string, currentPath: string): FileItem[] {
+export function parsePropfindResponse(xml: string, currentPath: string, prefix: string = ''): FileItem[] {
   const items: FileItem[] = []
 
   console.log('PROPFIND: raw xml length:', xml.length)
@@ -37,7 +68,7 @@ export function parsePropfindResponse(xml: string, currentPath: string): FileIte
   console.log('PROPFIND: responses count:', responses.length)
 
   // 规范化当前路径用于比较
-  const normalizedCurrentPath = normalizePathForCompare(currentPath)
+  const normalizedCurrentPath = normalizePathForCompare(stripWebdavPrefix(currentPath, prefix))
 
   for (const match of responses) {
     const responseXml = match[1]
@@ -54,6 +85,7 @@ export function parsePropfindResponse(xml: string, currentPath: string): FileIte
       // 如果解码失败，保持原样
     }
 
+    href = stripWebdavPrefix(href, prefix)
     console.log('PROPFIND: href:', href)
 
     // 排除根目录自身和当前目录自身
