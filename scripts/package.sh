@@ -10,6 +10,7 @@ TAG_PATTERN='^v[0-9]+\.[0-9]+\.[0-9]+$'
 MAIN_BRANCH="main"
 ORIGINAL_REF="$(git -C "${ROOT_DIR}" symbolic-ref --quiet --short HEAD || git -C "${ROOT_DIR}" rev-parse --verify HEAD)"
 SWITCHED_REF=0
+TARGET_TAG=""
 
 cleanup() {
   if [[ "${SWITCHED_REF}" -eq 1 ]]; then
@@ -66,18 +67,16 @@ next_patch_tag() {
 }
 
 prepare_target_tag() {
-  local tag
-
   git -C "${ROOT_DIR}" fetch --tags --quiet
 
   if [[ -n "${REQUESTED_TAG}" ]]; then
     validate_tag "${REQUESTED_TAG}"
     if ! git -C "${ROOT_DIR}" rev-parse -q --verify "refs/tags/${REQUESTED_TAG}" >/dev/null; then
-      echo "Tag does not exist, skip packaging: ${REQUESTED_TAG}"
-      exit 0
+      echo "Tag does not exist, skip packaging: ${REQUESTED_TAG}" >&2
+      return 2
     fi
-    echo "${REQUESTED_TAG}"
-    return
+    TARGET_TAG="${REQUESTED_TAG}"
+    return 0
   fi
 
   if ! git -C "${ROOT_DIR}" rev-parse -q --verify "refs/heads/${MAIN_BRANCH}" >/dev/null; then
@@ -94,18 +93,18 @@ prepare_target_tag() {
     local latest_hash
     latest_hash="$(git -C "${ROOT_DIR}" rev-list -n 1 "${latest_tag}")"
     if [[ "${latest_hash}" == "${main_hash}" ]]; then
-      echo "Latest tag ${latest_tag} already points to ${MAIN_BRANCH} HEAD, skip packaging."
-      exit 0
+      echo "Latest tag ${latest_tag} already points to ${MAIN_BRANCH} HEAD, skip packaging." >&2
+      return 2
     fi
   fi
 
-  tag="$(next_patch_tag "${latest_tag}")"
-  validate_tag "${tag}"
-  echo "Creating tag ${tag} on ${MAIN_BRANCH}@${main_hash}"
-  git -C "${ROOT_DIR}" tag "${tag}" "${main_hash}"
-  echo "Pushing tag ${tag} to origin"
-  git -C "${ROOT_DIR}" push origin "${tag}"
-  echo "${tag}"
+  TARGET_TAG="$(next_patch_tag "${latest_tag}")"
+  validate_tag "${TARGET_TAG}"
+  echo "Creating tag ${TARGET_TAG} on ${MAIN_BRANCH}@${main_hash}" >&2
+  git -C "${ROOT_DIR}" tag "${TARGET_TAG}" "${main_hash}"
+  echo "Pushing tag ${TARGET_TAG} to origin" >&2
+  git -C "${ROOT_DIR}" push origin "${TARGET_TAG}"
+  return 0
 }
 
 switch_to_tag() {
@@ -172,8 +171,15 @@ create_package() {
 }
 
 main() {
-  local tag
-  tag="$(prepare_target_tag)"
+  local rc
+  if ! prepare_target_tag; then
+    rc=$?
+    if [[ "${rc}" -eq 2 ]]; then
+      exit 0
+    fi
+    exit "${rc}"
+  fi
+  local tag="${TARGET_TAG}"
   switch_to_tag "${tag}"
   build_artifacts
   create_package "${tag}"
