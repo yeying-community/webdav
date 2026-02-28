@@ -459,7 +459,11 @@ function handleEnterDirectory(item: FileItem) {
   >
     <el-form label-width="90px">
       <el-form-item label="文件夹名称">
-        <el-input v-model="createFolderForm.name" placeholder="请输入文件夹名称" />
+        <el-input
+          v-model="createFolderForm.name"
+          placeholder="请输入文件夹名称"
+          @keydown.enter.prevent="submitCreateFolder"
+        />
       </el-form-item>
     </el-form>
     <template #footer>
