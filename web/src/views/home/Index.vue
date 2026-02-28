@@ -2932,20 +2932,10 @@ onBeforeUnmount(() => {
         <div class="login-hero">
           <div class="login-card">
             <div class="login-section">
-              <el-button
-                v-if="hasWallet()"
-                type="primary"
-                class="login-main-btn"
-                @click="handleWalletLogin"
-              >
-                钱包登陆
-              </el-button>
-              <div v-else class="login-warning">未检测到钱包插件</div>
-              <div v-if="hasWallet() && walletHistory.length" class="login-history">
-                <div class="login-history-title">选择历史账户</div>
+              <div v-if="hasWallet() && walletHistory.length" class="login-wallet-row">
                 <el-select
                   v-model="selectedWalletAccount"
-                  placeholder="选择历史账户"
+                  placeholder="历史账户（可选）"
                   class="login-history-select"
                 >
                   <el-option
@@ -2957,13 +2947,29 @@ onBeforeUnmount(() => {
                     <span class="mono">{{ accountItem }}</span>
                   </el-option>
                 </el-select>
+                <el-button
+                  type="primary"
+                  class="login-main-btn login-wallet-btn login-wallet-action-btn"
+                  @click="handleWalletLogin"
+                >
+                  钱包登陆
+                </el-button>
               </div>
+              <el-button
+                v-else-if="hasWallet()"
+                type="primary"
+                class="login-main-btn login-wallet-btn"
+                @click="handleWalletLogin"
+              >
+                钱包登陆
+              </el-button>
+              <div v-else class="login-warning">未检测到钱包插件</div>
             </div>
             <div class="login-divider"><span>或</span></div>
             <div class="login-section">
               <el-button
                 type="primary"
-                class="login-main-btn"
+                class="login-main-btn login-password-btn"
                 @click="showPasswordLoginForm = !showPasswordLoginForm"
               >
                 密码登陆
@@ -2990,7 +2996,7 @@ onBeforeUnmount(() => {
                     type="primary"
                     native-type="submit"
                     :loading="loginSubmitting"
-                    class="login-submit"
+                    class="login-submit login-password-submit-btn"
                   >
                     登录
                   </el-button>
@@ -3001,7 +3007,7 @@ onBeforeUnmount(() => {
             <div class="login-section">
               <el-button
                 type="primary"
-                class="login-main-btn"
+                class="login-main-btn login-email-btn"
                 @click="showEmailLoginForm = !showEmailLoginForm"
               >
                 邮箱登陆
@@ -3024,7 +3030,7 @@ onBeforeUnmount(() => {
                       />
                       <el-button
                         type="primary"
-                        class="email-code-button"
+                        class="email-code-button login-code-btn"
                         native-type="button"
                         :loading="emailCodeSending"
                         :disabled="emailCodeCountdown > 0"
@@ -3038,7 +3044,7 @@ onBeforeUnmount(() => {
                     type="primary"
                     native-type="submit"
                     :loading="emailLoginSubmitting"
-                    class="login-submit"
+                    class="login-submit login-email-submit-btn"
                   >
                     登录
                   </el-button>
@@ -3934,19 +3940,40 @@ onBeforeUnmount(() => {
   align-self: stretch;
 }
 
-.login-history {
+.login-history-select {
+  width: 100%;
+}
+
+.login-wallet-row {
+  width: 100%;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
-.login-history-title {
-  font-size: 13px;
-  color: #7b8797;
+.login-wallet-row .login-history-select {
+  flex: 1;
+  min-width: 0;
 }
 
-.login-history-select {
-  width: 100%;
+.login-wallet-action-btn {
+  width: 132px;
+  flex: none;
+}
+
+:deep(.login-history-select .el-select__wrapper) {
+  min-height: 40px;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1.5px #9ab7e6;
+  transition: box-shadow 0.16s ease;
+}
+
+:deep(.login-history-select .el-select__wrapper:hover) {
+  box-shadow: inset 0 0 0 1.5px #6a97dd;
+}
+
+:deep(.login-history-select .el-select__wrapper.is-focused) {
+  box-shadow: inset 0 0 0 2px #3f7fe0;
 }
 
 .login-divider {
@@ -3987,6 +4014,67 @@ onBeforeUnmount(() => {
 .email-code-button {
   flex: none;
   white-space: nowrap;
+}
+
+:deep(.el-button.login-main-btn),
+:deep(.el-button.login-submit),
+:deep(.el-button.email-code-button) {
+  border: 0 !important;
+  color: #ffffff !important;
+  --el-button-border-color: transparent;
+  --el-button-hover-border-color: transparent;
+  --el-button-active-border-color: transparent;
+  --el-button-disabled-border-color: transparent;
+  --el-button-text-color: #ffffff;
+  --el-button-hover-text-color: #ffffff;
+  --el-button-active-text-color: #ffffff;
+  background-color: transparent !important;
+  background-image: linear-gradient(135deg, #4d88ff 0%, #2958eb 100%) !important;
+  box-shadow: 0 8px 18px rgba(33, 88, 233, 0.25);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+}
+
+:deep(.el-button.login-wallet-btn) {
+  background-image: linear-gradient(135deg, #21c97b 0%, #0d8f54 100%) !important;
+  box-shadow: 0 8px 18px rgba(13, 143, 84, 0.28);
+}
+
+:deep(.el-button.login-password-btn),
+:deep(.el-button.login-password-submit-btn) {
+  background-image: linear-gradient(135deg, #4d88ff 0%, #2958eb 100%) !important;
+  box-shadow: 0 8px 18px rgba(33, 88, 233, 0.25);
+}
+
+:deep(.el-button.login-email-btn),
+:deep(.el-button.login-email-submit-btn),
+:deep(.el-button.login-code-btn) {
+  background-image: linear-gradient(135deg, #1bb8d7 0%, #0f7aa3 100%) !important;
+  box-shadow: 0 8px 18px rgba(15, 122, 163, 0.25);
+}
+
+:deep(.el-button.login-main-btn:not(.is-disabled):hover),
+:deep(.el-button.login-submit:not(.is-disabled):hover),
+:deep(.el-button.email-code-button:not(.is-disabled):hover) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+:deep(.el-button.login-main-btn:not(.is-disabled):active),
+:deep(.el-button.login-submit:not(.is-disabled):active),
+:deep(.el-button.email-code-button:not(.is-disabled):active) {
+  filter: brightness(0.96);
+  transform: translateY(0);
+  box-shadow: 0 5px 12px rgba(31, 111, 242, 0.2);
+}
+
+:deep(.el-button.login-main-btn.is-disabled),
+:deep(.el-button.login-submit.is-disabled),
+:deep(.el-button.email-code-button.is-disabled) {
+  border: 0 !important;
+  color: #f3f7ff !important;
+  background-image: none !important;
+  background-color: #b7c7df !important;
+  box-shadow: none;
 }
 
 .login-form-shell {
