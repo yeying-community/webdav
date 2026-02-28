@@ -6,7 +6,7 @@ import { isLoggedIn, getCurrentAccount, logout, hasWallet, loginWithWallet, getW
 const isAuth = ref(false)
 const account = ref<string | null>(null)
 const walletInfo = ref({ present: false, name: '' })
-const activeView = ref<string | null>(localStorage.getItem('webdav:lastView'))
+const activeView = ref<string | null>(localStorage.getItem('warehouse:lastView'))
 let stopAccountWatch: (() => void) | null = null
 
 onMounted(() => {
@@ -47,7 +47,7 @@ function handleLogout() {
 }
 
 function navigateTo(view: 'quotaManage' | 'addressBook') {
-  window.dispatchEvent(new CustomEvent('webdav:navigate', { detail: { view } }))
+  window.dispatchEvent(new CustomEvent('warehouse:navigate', { detail: { view } }))
 }
 
 function handleMenuCommand(command: string) {
@@ -75,11 +75,11 @@ function handleViewChanged(event: Event) {
 }
 
 onMounted(() => {
-  window.addEventListener('webdav:view-changed', handleViewChanged as EventListener)
+  window.addEventListener('warehouse:view-changed', handleViewChanged as EventListener)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('webdav:view-changed', handleViewChanged as EventListener)
+  window.removeEventListener('warehouse:view-changed', handleViewChanged as EventListener)
   stopAccountWatch?.()
 })
 </script>

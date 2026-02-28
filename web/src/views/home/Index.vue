@@ -136,11 +136,11 @@ const previewOrigin = ref('')
 const previewTarget = ref<FileItem | null>(null)
 const previewBlob = ref<Blob | null>(null)
 const previewReadOnly = ref(false)
-const VIEW_STORAGE_KEY = 'webdav:lastView'
-const FILE_PATH_STORAGE_KEY = 'webdav:lastFilePath'
-const SHARED_ACTIVE_STORAGE_KEY = 'webdav:sharedActiveId'
-const SHARED_PATH_STORAGE_KEY = 'webdav:sharedPath'
-const SIDEBAR_COLLAPSED_STORAGE_KEY = 'webdav:sidebarCollapsed'
+const VIEW_STORAGE_KEY = 'warehouse:lastView'
+const FILE_PATH_STORAGE_KEY = 'warehouse:lastFilePath'
+const SHARED_ACTIVE_STORAGE_KEY = 'warehouse:sharedActiveId'
+const SHARED_PATH_STORAGE_KEY = 'warehouse:sharedPath'
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'warehouse:sidebarCollapsed'
 type ViewKey = 'files' | 'recycle' | 'shareLink' | 'shareDirect' | 'sharedWithMe' | 'quotaManage' | 'addressBook' | 'uploadTasks'
 type AssetSpace = AssetSpaceInfo
 const ASSET_SPACE_NAME_BY_KEY: Record<string, string> = {
@@ -2674,7 +2674,7 @@ function handleMobileAction(command: string) {
 
 function persistView(view: ViewKey) {
   localStorage.setItem(VIEW_STORAGE_KEY, view)
-  window.dispatchEvent(new CustomEvent('webdav:view-changed', { detail: { view } }))
+  window.dispatchEvent(new CustomEvent('warehouse:view-changed', { detail: { view } }))
 }
 
 function clearSharedState() {
@@ -2808,11 +2808,11 @@ function handleExternalNavigate(event: Event) {
 }
 
 onMounted(() => {
-  window.addEventListener('webdav:navigate', handleExternalNavigate as EventListener)
+  window.addEventListener('warehouse:navigate', handleExternalNavigate as EventListener)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('webdav:navigate', handleExternalNavigate as EventListener)
+  window.removeEventListener('warehouse:navigate', handleExternalNavigate as EventListener)
 })
 
 function syncWalletHistory(next?: string) {

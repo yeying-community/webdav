@@ -2,9 +2,9 @@ import { getProvider, requestAccounts, loginWithChallenge, logout as sdkLogout, 
 
 const API_BASE = import.meta.env.VITE_API_BASE || ''
 const AUTH_BASE = API_BASE ? `${API_BASE.replace(/\/+$/, '')}/api/v1/public/auth` : '/api/v1/public/auth'
-const ACCOUNT_HISTORY_KEY = 'webdav:accountHistory'
-const ACCOUNT_CHANGED_KEY = 'webdav:accountChanged'
-export const AUTH_CHANGED_EVENT = 'webdav:auth-changed'
+const ACCOUNT_HISTORY_KEY = 'warehouse:accountHistory'
+const ACCOUNT_CHANGED_KEY = 'warehouse:accountChanged'
+export const AUTH_CHANGED_EVENT = 'warehouse:auth-changed'
 
 // 钱包 Provider 类型
 interface WalletProvider {
