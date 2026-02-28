@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Delete, DocumentCopy } from '@element-plus/icons-vue'
+import { Delete, DocumentCopy, View } from '@element-plus/icons-vue'
 import type { DirectShareItem, ShareItem } from '@/api'
 
 const props = defineProps<{
@@ -12,12 +12,22 @@ const props = defineProps<{
   copyShareLink: (item: ShareItem) => void
   revokeShare: (item: ShareItem) => void
   revokeDirectShare: (item: DirectShareItem) => void
+  openDirectShareDetail: (item: DirectShareItem) => void
   formatTime: (time: string | number) => string
   shortenAddress: (address?: string) => string
+  isDirectShareOwner: (item: DirectShareItem) => boolean
 }>()
 
 const linkRows = computed<ShareItem[]>(() => props.shareList)
 const directRows = computed<DirectShareItem[]>(() => props.directShareList)
+
+function getDirectRelationLabel(row: DirectShareItem): string {
+  return props.isDirectShareOwner(row) ? '我分享的' : '分享我的'
+}
+
+function getDirectRelationType(row: DirectShareItem): 'primary' | 'success' {
+  return props.isDirectShareOwner(row) ? 'primary' : 'success'
+}
 </script>
 
 <template>
@@ -84,9 +94,11 @@ const directRows = computed<DirectShareItem[]>(() => props.directShareList)
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="目标钱包" min-width="200">
+    <el-table-column label="关系" width="110">
       <template #default="{ row }">
-        <span class="mono">{{ shortenAddress(row.targetWallet) }}</span>
+        <el-tag :type="getDirectRelationType(row)" size="small" effect="light">
+          {{ getDirectRelationLabel(row) }}
+        </el-tag>
       </template>
     </el-table-column>
     <el-table-column label="过期时间" width="180">
@@ -99,10 +111,13 @@ const directRows = computed<DirectShareItem[]>(() => props.directShareList)
         <span class="time-cell">{{ row.createdAt ? formatTime(row.createdAt) : '-' }}</span>
       </template>
     </el-table-column>
-    <el-table-column label="操作" width="120" fixed="right">
+    <el-table-column label="操作" width="140" fixed="right">
       <template #default="{ row }">
         <div class="actions" @click.stop>
-          <el-tooltip content="取消分享" placement="top">
+          <el-tooltip content="详情" placement="top">
+            <el-button type="primary" link :icon="View" @click="openDirectShareDetail(row)" />
+          </el-tooltip>
+          <el-tooltip v-if="isDirectShareOwner(row)" content="取消分享" placement="top">
             <el-button type="danger" link :icon="Delete" @click="revokeDirectShare(row)" />
           </el-tooltip>
         </div>
@@ -159,17 +174,26 @@ const directRows = computed<DirectShareItem[]>(() => props.directShareList)
             <span class="iconfont" :class="row.isDir ? 'icon-wenjianjia' : 'icon-wenjian1'"></span>
             <span class="name" :title="row.name">{{ row.name }}</span>
           </div>
+          <el-tag :type="getDirectRelationType(row)" size="small" effect="light">
+            {{ getDirectRelationLabel(row) }}
+          </el-tag>
         </div>
         <div class="card-footer" @click.stop>
           <div class="card-meta card-meta-compact">
-            <span class="card-meta-value">{{ shortenAddress(row.targetWallet) }}</span>
+            <span class="card-meta-value">{{ row.expiresAt ? formatTime(row.expiresAt) : '永不过期' }}</span>
             <span class="card-meta-sep">·</span>
-            <span class="card-meta-value">
-              {{ row.expiresAt ? formatTime(row.expiresAt) : '永不过期' }}
-            </span>
+            <span class="card-meta-value">{{ row.createdAt ? formatTime(row.createdAt) : '-' }}</span>
           </div>
           <div class="card-actions card-actions-inline">
-            <el-button size="small" circle type="danger" :icon="Delete" @click="revokeDirectShare(row)" />
+            <el-button size="small" circle type="primary" :icon="View" @click="openDirectShareDetail(row)" />
+            <el-button
+              v-if="isDirectShareOwner(row)"
+              size="small"
+              circle
+              type="danger"
+              :icon="Delete"
+              @click="revokeDirectShare(row)"
+            />
           </div>
         </div>
       </div>

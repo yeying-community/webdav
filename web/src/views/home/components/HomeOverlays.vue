@@ -26,6 +26,7 @@ const props = defineProps<{
   copyShareLink: (item: ShareItem) => void
   revokeShare: (item: ShareItem) => void
   revokeDirectShare: (item: DirectShareItem) => void
+  isDirectShareOwner: (item: DirectShareItem) => boolean
   enterDirectory: (item: FileItem) => void
   enterSharedRoot: (item: DirectShareItem) => void
   enterSharedDirectory: (item: FileItem) => void
@@ -239,7 +240,15 @@ function handleEnterDirectory(item: FileItem) {
           <span class="detail-value mono">{{ detailDirectShare.path }}</span>
         </div>
         <div class="detail-row">
-          <span class="detail-label">目标钱包</span>
+          <span class="detail-label">所有者</span>
+          <span class="detail-value">{{ detailDirectShare.ownerName || (isDirectShareOwner(detailDirectShare) ? '我' : '-') }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">所有者地址</span>
+          <span class="detail-value mono">{{ detailDirectShare.ownerWallet || '-' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">目标地址</span>
           <span class="detail-value mono">{{ detailDirectShare.targetWallet || '-' }}</span>
         </div>
         <div class="detail-row">
@@ -263,7 +272,28 @@ function handleEnterDirectory(item: FileItem) {
         </div>
       </div>
       <div class="detail-actions">
-        <el-button type="danger" size="small" @click="revokeDirectShare(detailDirectShare)">
+        <el-button
+          v-if="detailDirectShare.isDir"
+          type="primary"
+          size="small"
+          @click="enterSharedRoot(detailDirectShare)"
+        >
+          进入目录
+        </el-button>
+        <el-button
+          v-else-if="detailDirectShare.permissions && detailDirectShare.permissions.includes('read')"
+          type="primary"
+          size="small"
+          @click="downloadSharedRoot(detailDirectShare)"
+        >
+          下载
+        </el-button>
+        <el-button
+          v-if="isDirectShareOwner(detailDirectShare)"
+          type="danger"
+          size="small"
+          @click="revokeDirectShare(detailDirectShare)"
+        >
           取消分享
         </el-button>
       </div>
@@ -290,6 +320,10 @@ function handleEnterDirectory(item: FileItem) {
         <div class="detail-row">
           <span class="detail-label">源钱包</span>
           <span class="detail-value mono">{{ detailReceivedShare.ownerWallet || '-' }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">目标地址</span>
+          <span class="detail-value mono">{{ detailReceivedShare.targetWallet || '-' }}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">权限</span>
@@ -459,7 +493,11 @@ function handleEnterDirectory(item: FileItem) {
   >
     <el-form label-width="90px">
       <el-form-item label="文件夹名称">
-        <el-input v-model="createFolderForm.name" placeholder="请输入文件夹名称" />
+        <el-input
+          v-model="createFolderForm.name"
+          placeholder="请输入文件夹名称"
+          @keydown.enter.prevent="submitCreateFolder"
+        />
       </el-form-item>
     </el-form>
     <template #footer>

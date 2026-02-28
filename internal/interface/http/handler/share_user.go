@@ -143,6 +143,8 @@ func (h *ShareUserHandler) HandleListMine(w http.ResponseWriter, r *http.Request
 		IsDir        bool     `json:"isDir"`
 		Permissions  []string `json:"permissions"`
 		TargetWallet string   `json:"targetWallet"`
+		OwnerWallet  string   `json:"ownerWallet,omitempty"`
+		OwnerName    string   `json:"ownerName,omitempty"`
 		ExpiresAt    string   `json:"expiresAt,omitempty"`
 		CreatedAt    string   `json:"createdAt"`
 	}
@@ -162,6 +164,8 @@ func (h *ShareUserHandler) HandleListMine(w http.ResponseWriter, r *http.Request
 			IsDir:        item.IsDir,
 			Permissions:  permissionsToStrings(perms),
 			TargetWallet: item.TargetWalletAddress,
+			OwnerWallet:  u.WalletAddress,
+			OwnerName:    u.Username,
 			CreatedAt:    item.CreatedAt.Format(timeLayout),
 		}
 		if item.ExpiresAt != nil {
@@ -205,15 +209,16 @@ func (h *ShareUserHandler) HandleListReceived(w http.ResponseWriter, r *http.Req
 	}
 
 	type itemResp struct {
-		ID          string   `json:"id"`
-		Name        string   `json:"name"`
-		Path        string   `json:"path"`
-		IsDir       bool     `json:"isDir"`
-		Permissions []string `json:"permissions"`
-		OwnerWallet string   `json:"ownerWallet,omitempty"`
-		OwnerName   string   `json:"ownerName,omitempty"`
-		ExpiresAt   string   `json:"expiresAt,omitempty"`
-		CreatedAt   string   `json:"createdAt"`
+		ID           string   `json:"id"`
+		Name         string   `json:"name"`
+		Path         string   `json:"path"`
+		IsDir        bool     `json:"isDir"`
+		Permissions  []string `json:"permissions"`
+		TargetWallet string   `json:"targetWallet,omitempty"`
+		OwnerWallet  string   `json:"ownerWallet,omitempty"`
+		OwnerName    string   `json:"ownerName,omitempty"`
+		ExpiresAt    string   `json:"expiresAt,omitempty"`
+		CreatedAt    string   `json:"createdAt"`
 	}
 
 	resp := struct {
@@ -225,13 +230,14 @@ func (h *ShareUserHandler) HandleListReceived(w http.ResponseWriter, r *http.Req
 	for _, item := range items {
 		perms := permissionsFromStored(item.Permissions)
 		row := itemResp{
-			ID:          item.ID,
-			Name:        item.Name,
-			Path:        item.Path,
-			IsDir:       item.IsDir,
-			Permissions: permissionsToStrings(perms),
-			OwnerName:   item.OwnerUsername,
-			CreatedAt:   item.CreatedAt.Format(timeLayout),
+			ID:           item.ID,
+			Name:         item.Name,
+			Path:         item.Path,
+			IsDir:        item.IsDir,
+			Permissions:  permissionsToStrings(perms),
+			TargetWallet: u.WalletAddress,
+			OwnerName:    item.OwnerUsername,
+			CreatedAt:    item.CreatedAt.Format(timeLayout),
 		}
 		if item.ExpiresAt != nil {
 			row.ExpiresAt = item.ExpiresAt.Format(timeLayout)
