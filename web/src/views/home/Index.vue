@@ -314,12 +314,19 @@ const searchKeyword = computed({
 const searchPlaceholder = computed(() => {
   if (showUploadTasks.value) return '搜索上传任务'
   if (showRecycle.value) return '搜索回收站'
-  if (showShare.value) return shareTab.value === 'link' ? '搜索分享链接' : '搜索定向分享'
+  if (showShare.value) return shareTab.value === 'link' ? '搜索下载链接' : '搜索定向分享'
   if (showSharedWithMe.value) return sharedActive.value ? '搜索共享内容' : '搜索共享列表'
   return '搜索文件或目录'
 })
 const currentAssetSpace = computed(() => resolveAssetSpaceByPath(currentPath.value))
 const currentAssetSpaceKey = computed(() => currentAssetSpace.value?.key || '')
+const fileParentRootPath = computed(() => normalizeDirectoryPath(currentAssetSpace.value?.path || '/'))
+const canGoFileParent = computed(() => {
+  const current = normalizePathForSpaceMatch(currentPath.value)
+  const root = normalizePathForSpaceMatch(fileParentRootPath.value)
+  if (root === '/') return current !== '/'
+  return current !== root
+})
 const appsSpacePath = computed(() => getAppsSpacePath())
 const isInAppsSpace = computed(() => isPathInSpace(currentPath.value, appsSpacePath.value))
 const currentTopLevelApp = computed(() => getTopLevelAppFromPath(currentPath.value))
@@ -336,7 +343,7 @@ const fileBreadcrumbRoot = computed(() => {
 })
 const mobileLocationLabel = computed(() => {
   if (showRecycle.value) return '回收站'
-  if (showShare.value) return shareTab.value === 'link' ? '分享链接' : '定向分享'
+  if (showShare.value) return shareTab.value === 'link' ? '下载链接' : '定向分享'
   if (showSharedWithMe.value) return sharedActive.value ? '共享内容' : '共享给我'
   if (showQuotaManage.value) return '用户中心'
   if (showAddressBook.value) return '地址簿'
@@ -1281,10 +1288,17 @@ async function copyCurrentPath() {
 
 // 返回上级目录
 function goParent() {
-  if (currentPath.value === '/') return
-  const parts = currentPath.value.split('/').filter(Boolean)
+  const current = normalizeDirectoryPath(currentPath.value)
+  const rootPath = fileParentRootPath.value
+  const normalizedCurrent = normalizePathForSpaceMatch(current)
+  const normalizedRoot = normalizePathForSpaceMatch(rootPath)
+  if (normalizedCurrent === '/' || normalizedCurrent === normalizedRoot) return
+  const parts = current.split('/').filter(Boolean)
   parts.pop()
-  const parentPath = parts.length > 0 ? '/' + parts.join('/') + '/' : '/'
+  let parentPath = parts.length > 0 ? '/' + parts.join('/') + '/' : '/'
+  if (normalizedRoot !== '/' && !isPathInSpace(parentPath, rootPath)) {
+    parentPath = rootPath
+  }
   fetchFiles(parentPath)
 }
 
@@ -3052,7 +3066,7 @@ onBeforeUnmount(() => {
                   <span v-show="!sidePanelCollapsed">共享给我</span>
                 </button>
               </el-tooltip>
-              <el-tooltip content="分享链接" placement="right" :disabled="!sidePanelCollapsed">
+              <el-tooltip content="下载链接" placement="right" :disabled="!sidePanelCollapsed">
                 <button
                   type="button"
                   class="nav-item"
@@ -3060,7 +3074,7 @@ onBeforeUnmount(() => {
                   @click="enterShare('link')"
                 >
                   <el-icon class="nav-icon"><DocumentCopy /></el-icon>
-                  <span v-show="!sidePanelCollapsed">分享链接</span>
+                  <span v-show="!sidePanelCollapsed">下载链接</span>
                 </button>
               </el-tooltip>
               <el-tooltip content="定向分享" placement="right" :disabled="!sidePanelCollapsed">
@@ -3136,7 +3150,7 @@ onBeforeUnmount(() => {
               </template>
               <template v-else>
                 <el-tooltip content="返回上级" placement="top">
-                  <el-button circle :icon="ArrowUp" @click="goParent" :disabled="currentPath === '/'" />
+                  <el-button circle :icon="ArrowUp" @click="goParent" :disabled="!canGoFileParent" />
                 </el-tooltip>
               </template>
                 <template v-if="showRecycle">
@@ -3153,7 +3167,7 @@ onBeforeUnmount(() => {
                 <template v-else-if="showShare">
                   <div class="path-pill">
                     <span class="path-label">当前位置</span>
-                    <span class="path-value">{{ shareTab === 'link' ? '分享链接' : '定向分享' }}</span>
+                    <span class="path-value">{{ shareTab === 'link' ? '下载链接' : '定向分享' }}</span>
                   </div>
                 </template>
                 <template v-else-if="showSharedWithMe">
@@ -3718,7 +3732,7 @@ onBeforeUnmount(() => {
           @click="enterShare('link')"
         >
           <el-icon><DocumentCopy /></el-icon>
-          <span>链接</span>
+          <span>下载</span>
         </button>
         <button
           type="button"
