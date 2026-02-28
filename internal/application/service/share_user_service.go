@@ -241,7 +241,7 @@ func (s *ShareUserService) Revoke(ctx context.Context, owner *user.User, id stri
 	return s.repo.DeleteByID(ctx, id)
 }
 
-// ResolveForTarget 校验分享并返回分享记录与拥有者
+// ResolveForTarget 校验分享并返回分享记录与拥有者（目标用户或分享者本人）
 func (s *ShareUserService) ResolveForTarget(ctx context.Context, target *user.User, id string, requiredActions ...string) (*shareuser.ShareUserItem, *user.User, error) {
 	item, err := s.repo.GetByID(ctx, id)
 	if err != nil {
@@ -250,7 +250,7 @@ func (s *ShareUserService) ResolveForTarget(ctx context.Context, target *user.Us
 	if item.IsExpired() {
 		return nil, nil, shareuser.ErrShareExpired
 	}
-	if item.TargetUserID != target.ID {
+	if item.TargetUserID != target.ID && item.OwnerUserID != target.ID {
 		return nil, nil, fmt.Errorf("permission denied: not your share")
 	}
 	normalized, err := s.normalizeItemPath(item.Path)

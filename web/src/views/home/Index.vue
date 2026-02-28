@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed, watch, defineAsyncComponent } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ArrowLeft, ArrowUp, Delete, Expand, Fold, FolderAdd, FolderOpened, Grid, Refresh, Upload, DocumentCopy, Share, UserFilled, Search, MoreFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowUp, Delete, Expand, Fold, FolderAdd, FolderOpened, Grid, Refresh, Upload, DocumentCopy, Share, Search, MoreFilled } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { quotaApi, userApi, recycleApi, shareApi, directShareApi, assetsApi, type RecycleItem, type ShareItem, type DirectShareItem, type AssetSpaceInfo } from '@/api'
 import { isLoggedIn, hasWallet, getUsername, getWalletName, getCurrentAccount, getUserPermissions, getUserCreatedAt, loginWithWallet, loginWithPassword, sendEmailCode, loginWithEmailCode, getAccountHistory, watchWalletAccounts, consumeAccountChanged } from '@/plugins/auth'
@@ -143,6 +143,8 @@ const SHARED_PATH_STORAGE_KEY = 'warehouse:sharedPath'
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'warehouse:sidebarCollapsed'
 type ViewKey = 'files' | 'recycle' | 'shareLink' | 'shareDirect' | 'sharedWithMe' | 'quotaManage' | 'addressBook' | 'uploadTasks'
 type AssetSpace = AssetSpaceInfo
+type DirectShareRelation = 'owned' | 'received'
+type DirectShareListItem = DirectShareItem & { relation?: DirectShareRelation }
 const ASSET_SPACE_NAME_BY_KEY: Record<string, string> = {
   personal: '个人资产',
   apps: '应用资产'
@@ -315,7 +317,7 @@ const searchPlaceholder = computed(() => {
   if (showUploadTasks.value) return '搜索上传任务'
   if (showRecycle.value) return '搜索回收站'
   if (showShare.value) return shareTab.value === 'link' ? '搜索下载链接' : '搜索定向分享'
-  if (showSharedWithMe.value) return sharedActive.value ? '搜索共享内容' : '搜索共享列表'
+  if (showSharedWithMe.value) return sharedActive.value ? '搜索共享内容' : '搜索定向分享'
   return '搜索文件或目录'
 })
 const currentAssetSpace = computed(() => resolveAssetSpaceByPath(currentPath.value))
@@ -344,7 +346,7 @@ const fileBreadcrumbRoot = computed(() => {
 const mobileLocationLabel = computed(() => {
   if (showRecycle.value) return '回收站'
   if (showShare.value) return shareTab.value === 'link' ? '下载链接' : '定向分享'
-  if (showSharedWithMe.value) return sharedActive.value ? '共享内容' : '共享给我'
+  if (showSharedWithMe.value) return sharedActive.value ? '共享内容' : '定向分享'
   if (showQuotaManage.value) return '用户中心'
   if (showAddressBook.value) return '地址簿'
   if (showUploadTasks.value) return '上传任务'
@@ -400,6 +402,43 @@ const quotaAvailable = computed(() => {
     : quota.value.quota - quota.value.used
   return Math.max(available, 0)
 })
+
+function normalizeWalletAddress(address?: string | null): string {
+  return String(address || '').trim().toLowerCase()
+}
+
+const currentWalletAddress = computed(() =>
+  normalizeWalletAddress(userInfo.value?.wallet_address || localStorage.getItem('walletAddress') || getCurrentAccount() || '')
+)
+
+function resolveDirectShareRelation(item: DirectShareListItem): DirectShareRelation {
+  if (item.relation === 'owned' || item.relation === 'received') {
+    return item.relation
+  }
+  const ownerWallet = normalizeWalletAddress(item.ownerWallet)
+  if (ownerWallet && currentWalletAddress.value) {
+    return ownerWallet === currentWalletAddress.value ? 'owned' : 'received'
+  }
+  return directShareList.value.some(entry => entry.id === item.id) ? 'owned' : 'received'
+}
+
+function isDirectShareOwner(item: DirectShareItem): boolean {
+  return resolveDirectShareRelation(item as DirectShareListItem) === 'owned'
+}
+
+const mergedDirectShareList = computed<DirectShareListItem[]>(() => {
+  const ownedRows = directShareList.value.map(item => ({ ...item, relation: 'owned' as const }))
+  const seen = new Set(ownedRows.map(item => item.id))
+  const receivedRows = sharedWithMeList.value
+    .filter(item => !seen.has(item.id))
+    .map(item => ({ ...item, relation: 'received' as const }))
+  return [...ownedRows, ...receivedRows].sort((a, b) => {
+    const timeA = Date.parse(a.createdAt || '') || 0
+    const timeB = Date.parse(b.createdAt || '') || 0
+    return timeB - timeA
+  })
+})
+
 const breadcrumbItems = computed(() => {
   if (showRecycle.value) return []
   const rootPath = normalizePathForSpaceMatch(fileBreadcrumbRoot.value.path)
@@ -454,11 +493,15 @@ const filteredShareList = computed(() => {
 })
 const filteredDirectShareList = computed(() => {
   const token = searchToken.value
-  if (!token) return directShareList.value
-  return directShareList.value.filter(item => {
+  if (!token) return mergedDirectShareList.value
+  return mergedDirectShareList.value.filter(item => {
     if (item.name.toLowerCase().includes(token)) return true
     if (item.path?.toLowerCase().includes(token)) return true
-    return item.targetWallet?.toLowerCase().includes(token) || false
+    if (item.targetWallet?.toLowerCase().includes(token)) return true
+    if (item.ownerName?.toLowerCase().includes(token)) return true
+    if (item.ownerWallet?.toLowerCase().includes(token)) return true
+    const relationLabel = isDirectShareOwner(item) ? '我分享的' : '分享我的'
+    return relationLabel.includes(token)
   })
 })
 const filteredSharedWithMeList = computed(() => {
@@ -1042,6 +1085,10 @@ function openShareDetail(mode: 'share' | 'directShare' | 'receivedShare', item: 
   detailDrawerVisible.value = true
 }
 
+function openDirectShareDetail(item: DirectShareItem) {
+  openShareDetail('directShare', item)
+}
+
 function openSharedEntryDetail(item: FileItem) {
   detailItem.value = item
   detailMode.value = 'sharedEntry'
@@ -1208,7 +1255,12 @@ function handleRowClick(row: FileItem | RecycleItem | ShareItem | DirectShareIte
     if (shareTab.value === 'link') {
       openShareDetail('share', row as ShareItem)
     } else {
-      openShareDetail('directShare', row as DirectShareItem)
+      const item = row as DirectShareItem
+      if (item.isDir) {
+        enterSharedRoot(item)
+      } else {
+        openDirectShareDetail(item)
+      }
     }
     return
   }
@@ -1278,7 +1330,7 @@ async function copyCurrentPath() {
     if (sharedActive.value) {
       text = `${sharedActive.value.name}${sharedPath.value}`
     } else {
-      text = '共享给我'
+      text = '定向分享'
     }
   } else if (showAddressBook.value) {
     text = '地址簿'
@@ -2258,13 +2310,27 @@ async function fetchShare() {
 // 获取我分享的（定向）列表
 async function fetchDirectShareList() {
   directShareLoading.value = true
+  sharedWithMeLoading.value = true
   try {
-    const data = await directShareApi.listMine()
-    directShareList.value = data.items
+    const [mineResult, receivedResult] = await Promise.allSettled([
+      directShareApi.listMine(),
+      directShareApi.listReceived()
+    ])
+    if (mineResult.status === 'fulfilled') {
+      directShareList.value = mineResult.value.items
+    } else {
+      console.error('获取我发起的定向分享失败:', mineResult.reason)
+    }
+    if (receivedResult.status === 'fulfilled') {
+      sharedWithMeList.value = receivedResult.value.items
+    } else {
+      console.error('获取分享给我的定向分享失败:', receivedResult.reason)
+    }
   } catch (error) {
     console.error('获取定向分享列表失败:', error)
   } finally {
     directShareLoading.value = false
+    sharedWithMeLoading.value = false
   }
 }
 
@@ -2288,8 +2354,9 @@ async function fetchSharedEntries(path: string = sharedPath.value) {
     const cleanPath = path.replace(/^\/+/, '').replace(/\/$/, '')
     const data = await directShareApi.listEntries(sharedActive.value.id, cleanPath)
     sharedEntries.value = data.items as FileItem[]
-  } catch (error) {
+  } catch (error: any) {
     console.error('获取共享目录失败:', error)
+    showError(error?.message || '获取共享目录失败')
   } finally {
     sharedEntriesLoading.value = false
   }
@@ -2315,9 +2382,9 @@ function enterShare(type: 'link' | 'direct' = shareTab.value) {
   }
 }
 
-// 进入共享给我
-function enterSharedWithMe(keepSharedState: boolean | Event = false) {
-  const shouldKeep = typeof keepSharedState === 'boolean' ? keepSharedState : false
+// 进入共享的目录
+function enterSharedRoot(item: DirectShareItem) {
+  if (!item.isDir) return
   detailDrawerVisible.value = false
   showSharedWithMe.value = true
   showShare.value = false
@@ -2325,34 +2392,29 @@ function enterSharedWithMe(keepSharedState: boolean | Event = false) {
   showQuotaManage.value = false
   showAddressBook.value = false
   showUploadTasks.value = false
-  sharedActive.value = null
-  sharedPath.value = '/'
-  sharedEntries.value = []
-  if (!shouldKeep) {
-    clearSharedState()
-  }
-  persistView('sharedWithMe')
-  fetchSharedWithMe()
-}
-
-// 进入共享的目录
-function enterSharedRoot(item: DirectShareItem) {
-  if (!item.isDir) return
-  detailDrawerVisible.value = false
   sharedActive.value = item
   sharedPath.value = '/'
   sharedEntries.value = []
+  persistView('shareDirect')
   persistSharedState()
   fetchSharedEntries('/')
 }
 
 function backToSharedList() {
   detailDrawerVisible.value = false
+  showSharedWithMe.value = false
+  showShare.value = true
+  showRecycle.value = false
+  showQuotaManage.value = false
+  showAddressBook.value = false
+  showUploadTasks.value = false
+  shareTab.value = 'direct'
   sharedActive.value = null
   sharedPath.value = '/'
   sharedEntries.value = []
+  persistView('shareDirect')
   clearSharedState()
-  fetchSharedWithMe()
+  fetchDirectShareList()
 }
 
 // 取消分享
@@ -2367,6 +2429,10 @@ async function revokeShare(item: ShareItem) {
 }
 
 async function revokeDirectShare(item: DirectShareItem) {
+  if (!isDirectShareOwner(item)) {
+    showError('仅分享者可以取消该定向分享')
+    return
+  }
   if (!(await confirmAction(`确定取消分享 ${item.name} 吗？`, '取消分享'))) return
   try {
     await directShareApi.revoke(item.id)
@@ -2713,29 +2779,7 @@ function persistSharedState() {
 }
 
 async function restoreSharedWithMeView() {
-  detailDrawerVisible.value = false
-  showSharedWithMe.value = true
-  showShare.value = false
-  showRecycle.value = false
-  showQuotaManage.value = false
-  showAddressBook.value = false
-  showUploadTasks.value = false
-  sharedActive.value = null
-  sharedEntries.value = []
-  const storedShareId = localStorage.getItem(SHARED_ACTIVE_STORAGE_KEY)
-  const storedPath = localStorage.getItem(SHARED_PATH_STORAGE_KEY) || '/'
-  sharedPath.value = '/'
-  persistView('sharedWithMe')
-  await fetchSharedWithMe()
-  if (!storedShareId) return
-  const target = sharedWithMeList.value.find(item => item.id === storedShareId)
-  if (!target) {
-    clearSharedState()
-    return
-  }
-  sharedActive.value = target
-  sharedPath.value = storedPath || '/'
-  await fetchSharedEntries(sharedPath.value)
+  enterShare('direct')
 }
 
 async function restoreView() {
@@ -3055,17 +3099,6 @@ onBeforeUnmount(() => {
           <div class="nav-group">
             <div class="nav-group-title" v-show="!sidePanelCollapsed">共享协作</div>
             <div class="nav-list">
-              <el-tooltip content="共享给我" placement="right" :disabled="!sidePanelCollapsed">
-                <button
-                  type="button"
-                  class="nav-item"
-                  :class="{ active: showSharedWithMe }"
-                  @click="enterSharedWithMe"
-                >
-                  <el-icon class="nav-icon"><UserFilled /></el-icon>
-                  <span v-show="!sidePanelCollapsed">共享给我</span>
-                </button>
-              </el-tooltip>
               <el-tooltip content="下载链接" placement="right" :disabled="!sidePanelCollapsed">
                 <button
                   type="button"
@@ -3195,7 +3228,7 @@ onBeforeUnmount(() => {
                   <template v-else>
                     <div class="path-pill">
                       <span class="path-label">当前位置</span>
-                      <span class="path-value">共享给我</span>
+                      <span class="path-value">定向分享</span>
                     </div>
                   </template>
                 </template>
@@ -3594,8 +3627,10 @@ onBeforeUnmount(() => {
               :copy-share-link="copyShareLink"
               :revoke-share="revokeShare"
               :revoke-direct-share="revokeDirectShare"
+              :open-direct-share-detail="openDirectShareDetail"
               :format-time="formatTime"
               :shorten-address="shortenAddress"
+              :is-direct-share-owner="isDirectShareOwner"
             />
             <SharedWithMeTableView
               v-else-if="showSharedWithMe"
@@ -3658,6 +3693,7 @@ onBeforeUnmount(() => {
         :copy-share-link="copyShareLink"
         :revoke-share="revokeShare"
         :revoke-direct-share="revokeDirectShare"
+        :is-direct-share-owner="isDirectShareOwner"
         :enter-directory="enterDirectory"
         :enter-shared-root="enterSharedRoot"
         :enter-shared-directory="enterSharedDirectory"
@@ -3715,15 +3751,6 @@ onBeforeUnmount(() => {
         >
           <el-icon><FolderOpened /></el-icon>
           <span>文件</span>
-        </button>
-        <button
-          type="button"
-          class="mobile-nav-item"
-          :class="{ active: showSharedWithMe }"
-          @click="enterSharedWithMe"
-        >
-          <el-icon><UserFilled /></el-icon>
-          <span>共享</span>
         </button>
         <button
           type="button"
